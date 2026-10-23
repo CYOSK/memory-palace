@@ -1,0 +1,27 @@
+# 数据库（含个人记忆，绝不入库）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 依赖
+node_modules/
+.npmrc
+
+# 模型权重（体积大，走 huggingface 下载）
+models/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 日志
+*.log
