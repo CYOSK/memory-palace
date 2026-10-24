@@ -141,5 +141,3 @@ python palace.py stats                  # 总数
 并在此之上新增/修正了：幂等建表、路径环境变量化、GBK 控制台兼容等。
 
 语义层：transformers.js + bge-small-zh-v1.5（512 维，CLS pooling + L2 normalize）。
-
-对本仓库的修补与发布流程贡献：DeepSeek Harness 会话（CYOSK）。
