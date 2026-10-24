@@ -131,5 +131,15 @@ python palace.py stats                  # 总数
 
 ## 七、致谢与出处
 
-结构上参考了 dsh-engram 的设计（房间/门牌/索引），实现全部重写：无插件、纯本地、只用标准库。
-语义层是 transformers.js + bge-small-zh-v1.5（512 维，CLS pooling + L2 normalize）。
+本项目改写自 DeepSeek Harness 的记忆宫殿插件 **[`@kenz1117/dsh-engram`](https://www.npmjs.com/package/@kenz1117/dsh-engram)**（dsh-engram）。
+
+保留自该插件的部分：房间/门牌/索引的设计与数据库 schema（五厅：事实厅/偏好阁/技法坊/决策堂/事件廊，
+节点、画像、实体、事实、边等表结构）。
+
+重写的部分：从插件实现改为**无插件、纯本地、只用标准库**的命令行工具——
+去掉了对插件宿主运行时与原生 onnxruntime 的依赖（语义层改用 transformers.js + onnxruntime-web wasm），
+并在此之上新增/修正了：幂等建表、路径环境变量化、GBK 控制台兼容等。
+
+语义层：transformers.js + bge-small-zh-v1.5（512 维，CLS pooling + L2 normalize）。
+
+对本仓库的修补与发布流程贡献：DeepSeek Harness 会话（CYOSK）。

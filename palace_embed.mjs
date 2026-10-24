@@ -1,3 +1,6 @@
+// 语义检索层——改写自 DeepSeek Harness 插件 @kenz1117/dsh-engram 的语义检索：
+// 检索接口与 embedding 存储格式沿用其设计，推理后端由原生 onnxruntime 改为
+// transformers.js + onnxruntime-web（wasm），避免原生 dll 崩溃。
 import { pipeline, env } from "@xenova/transformers";
 import { DatabaseSync } from "node:sqlite";
 

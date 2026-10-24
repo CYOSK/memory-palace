@@ -1,3 +1,5 @@
+-- 本 schema 沿用自 DeepSeek Harness 插件 @kenz1117/dsh-engram 的数据库设计
+-- （五厅记忆模型），仅补充 nodes_revisions 表（修订留痕）。
 CREATE TABLE IF NOT EXISTS nodes (
   id TEXT PRIMARY KEY, scope TEXT NOT NULL, kind TEXT NOT NULL, content TEXT NOT NULL,
   importance REAL NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL,

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-本地记忆宫殿（自留地版）—— 按 dsh-engram 的规格重建，离线、无插件依赖。
+本地记忆宫殿（自留地版）—— 改写自 DeepSeek Harness 插件 @kenz1117/dsh-engram，
+离线、无插件依赖。保留其 schema 与五厅规格，实现全部重写为纯 Python 标准库。
 
 数据文件：默认脚本同目录下的 palace.db，可用 --db 或环境变量 PALACE_DB 覆盖。
-规格（与原 dsh-engram 一致）：
+规格（与原 @kenz1117/dsh-engram 一致）：
   rooms（kind -> 厅名）:
     fact       -> 事实厅
     preference -> 偏好阁
