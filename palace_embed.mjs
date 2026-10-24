@@ -2,12 +2,12 @@ import { pipeline, env } from "@xenova/transformers";
 import { DatabaseSync } from "node:sqlite";
 
 import { fileURLToPath } from "node:url";
-import path from "node:path";
+import { dirname, join } from "node:path";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DB = process.env.PALACE_DB || path.join(HERE, "palace.db");
-// 模型目录优先级：环境变量 PALACE_MODEL_DIR > 脚本同目录 models/
-const MODEL_DIR = process.env.PALACE_MODEL_DIR || path.join(HERE, "models") + path.sep;
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DB = process.env.PALACE_DB || join(HERE, "palace.db");
+const MODEL_DIR =
+  (process.env.PALACE_MODEL_DIR || join(HERE, "models")).replace(/\\/g, "/") + "/";
 
 env.localModelPath = MODEL_DIR;
 env.allowRemoteModels = false;

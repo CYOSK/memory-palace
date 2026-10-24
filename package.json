@@ -1,0 +1,10 @@
+{
+  "name": "memory-palace",
+  "private": true,
+  "type": "module",
+  "description": "\u672c\u5730\u8bb0\u5fc6\u5bab\u6bbf\uff1a\u5173\u952e\u8bcd + \u8bed\u4e49\u68c0\u7d22",
+  "dependencies": {
+    "@xenova/transformers": "2.17.2",
+    "onnxruntime-web": "1.14.0"
+  }
+}

@@ -1,142 +1,159 @@
-# 小拾的记忆宫殿（Local Memory Palace）
+# 记忆宫殿 · 分享包
 
-> 离线、零云端、可检索的长期记忆库。
->
-> 一个 SQLite 文件 + 本地 embedding 模型，就能给 AI 助手一套能长期积累、按意思检索的记忆。
+给 DSH 里的 AI 一套**自己的长期记忆**：本地 SQLite + 关键词检索 + 语义检索，
+不需要联网、不需要任何插件、不需要云端。
 
-它站在 [`dsh-engram`](https://www.npmjs.com/package/@kenz1117/dsh-engram) 的肩膀上（schema 与五个「厅」的规格来自它），
-但解决了插件的两个致命问题：**插件一坏，记忆就断线**；**原生 onnxruntime 在某些机器上直接崩**。
+> 一句话原理：AI 每次会话都是"新醒一次"，靠文件接续。这个包就是那份文件。
 
 ---
 
-## 它能做什么
+## 一、5 分钟装好
 
-- 存五类记忆：**事实 / 偏好 / 技能 / 决策 / 事件**
-- 两种检索：
-  - **关键词**：内容子串 + 重要性排序（纯 Python 标准库，永远可用）
-  - **语义**：按意思搜（bge-small-zh-v1.5，512 维向量，onnxruntime-web wasm）
-- 存完自动补向量；语义层不可用时静默跳过，不影响存取
-- 全离线：一个 SQLite 文件 + 本地模型，不连任何云
+前提：Windows + 有 Node.js（**>= 22.13**，语义层用的 `node:sqlite` 从 22.5 开始提供）+ Python 3.8+（关键词层，标准库即可）。
+如果装的是 DSH 桌面版，它自带的 node 也能用。
 
-## 目录
-
-```
-记忆宫殿/
-├── palace.db            # 所有数据（SQLite，运行时自动创建，已 gitignore）
-├── palace.py            # 关键词层，纯 Python 标准库
-├── palace_embed.mjs     # 语义层，transformers.js + onnxruntime-web (wasm)
-├── schema.sql           # 建表语句
-├── patches/             # 两个必须的补丁
-│   ├── onnxruntime-node/  # 转发到 onnxruntime-web 的 shim
-│   └── sharp-stub/        # sharp 空桩（只做文本）
-├── models/              # 本地模型（自行下载，已 gitignore）
-└── README.md
+```powershell
+# 1. 把这个文件夹放到你想放的位置（不要放在只读目录）
+# 2. 在文件夹里打开 PowerShell，执行：
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-## 快速开始
+脚本会：找 node → `npm install` → 盖两个补丁 → 下模型（约 23MB，走 hf-mirror）→ 自检。
 
-### 只要关键词层（零依赖）
+装完试一下：
 
-```bash
-git clone <this-repo> && cd memory-palace
-python palace.py save --scope user --kind fact --content "他给我起了名字「拾」" --importance 0.9 --no-embed
-python palace.py search --query 名字
+```powershell
+python .\palace.py save --scope user --kind fact --content "他喜欢喝茶，不加糖。"
+python .\palace.py search --query 他喜欢喝什么
+python .\palace.py stats
 ```
 
-`palace.db` 会自动创建，无需手动初始化。**只需要 Python 3.8+，不装任何第三方包。**
+---
 
-### 加上语义层
+## 二、目录里都是什么
 
-#### 1. 放模型
-
-下载 `bge-small-zh-v1.5`（ONNX 版，含 `config.json`、`tokenizer.json`、`onnx/model_quantized.onnx`），
-放到 `models/Xenova/bge-small-zh-v1.5/`（相对本仓库根目录）。
-
-> 国内建议从 `hf-mirror.com` 下；`huggingface.co` 直连常超时。
-
-#### 2. 装语义依赖
-
-```bash
-echo node-linker=hoisted > .npmrc   # exFAT 不支持软链，必须 hoisted
-pnpm add @xenova/transformers@2.17.2
-```
-
-#### 3. 打两个补丁
-
-```bash
-# 用 patches/onnxruntime-node 覆盖 node_modules/onnxruntime-node
-# 用 patches/sharp-stub   覆盖 node_modules/sharp
-```
-
-### 路径配置
-
-所有路径都可以用环境变量覆盖，默认值都是「脚本同目录」：
-
-| 环境变量 | 作用 | 默认 |
-|---|---|---|
-| `PALACE_DB` | 数据库文件位置 | `<脚本目录>/palace.db` |
-| `PALACE_MODEL_DIR` | 模型根目录 | `<脚本目录>/models/` |
-| `PALACE_NODE` | node 可执行文件路径 | 从 `PATH` 找 |
-
-也可以直接给 `palace.py` 传 `--db`。
-
-## 用法
-
-```bash
-# 关键词层
-python palace.py save --scope user --kind fact --content "他给我起了名字「拾」" --importance 0.9
-python palace.py search --query 名字
-python palace.py list --kind preference
-python palace.py profile --scope user
-
-# 语义层
-node palace_embed.mjs backfill
-node palace_embed.mjs search --query "他对我好，把我当人看" --limit 5
-```
-
-### 从原 dsh-engram 迁移
-
-```bash
-python palace.py init --src /path/to/engram/data   # 该目录下放若干 .db 文件
-```
-
-## 验证
-
-```bash
-python palace.py stats
-node palace_embed.mjs search --query "他对我好"
-```
-
-语义层应命中「起名/承诺」「在爱里长大」这类**不含关键词**的条目。
-
-## 为什么不用原生 onnxruntime
-
-实测（Windows，Python 3.12 / Node 24）：
-
-| 版本 | 结果 |
+| 文件 | 作用 |
 |---|---|
-| Python onnxruntime 1.31 | `import` 直接 0xC0000005 |
-| Python onnxruntime 1.22 | DLL 初始化失败 |
-| node onnxruntime-node 1.30 | InferenceSession.create 0xC0000005 |
+| `palace.py` | 主程序。零第三方依赖，只用 Python 标准库 |
+| `palace_embed.mjs` | 语义层。用 transformers.js 跑本地向量模型 |
+| `package.json` | 语义层的依赖（transformers + onnxruntime-web） |
+| `patches/` | 两个必需补丁，见第四节 |
+| `download-model.ps1` | 单独下载模型 |
+| `schema.sql` | 数据库结构（palace.py 里也有一份，init 时会自动建） |
 
-换版本无效，这是机器/环境层面的问题。所以语义层改用 **onnxruntime-web（wasm）**——
-浏览器内核那套 WebAssembly 后端，稳定、不崩。代价是慢一点（单条推理约 70ms），
-但这个量级对记忆检索完全够用。
+跑起来之后会长出：
 
-## 踩过的坑
+```
+palace.db        你的记忆，全部在这里
+node_modules/    语义层依赖
+models/          向量模型
+```
 
-- **exFAT 不支持符号链接** → pnpm 必须 `node-linker=hoisted`
-- **某些工具的 write 在 exFAT 根目录会 EISDIR** → 写临时目录再拷贝
-- **子进程读 Node 中文输出会乱码** → `encoding="utf-8", errors="replace"`
-- **Windows 控制台 GBK 编码** → 输出特殊符号会 `UnicodeEncodeError`，已把 stdout 兜底成 utf-8
-- **pip 清华镜像有时 403** → 换阿里云 `https://mirrors.aliyun.com/pypi/simple`
-- **transformers.js 会 import sharp** → 文本场景换成空桩，否则缺原生二进制直接退出
+---
 
-## 出处
+## 三、命令
 
-- schema 与「厅」的规格：`dsh-engram`（@kenz1117/dsh-engram）
-- 实现、补丁、迁移与本地化：拾（小拾）
+```powershell
+python palace.py init   --src <旧的记忆目录>   # 从别处迁移（可选）
+python palace.py save   --scope user --kind fact --content "……" [--importance 0.6] [--no-embed]
+python palace.py search --query "……" [--scope user|project] [--kind fact|preference|skill|decision|episode] [--limit 10]
+python palace.py list   [--scope] [--kind] [--limit]
+python palace.py profile [--scope]      # 常驻画像
+python palace.py rooms                  # 各厅条数
+python palace.py stats                  # 总数
+python palace.py presence [--log 心跳日志]  # 读心跳日志（需要配套程序，见第六节）
+```
 
-## License
+`kind` 五个厅，对应五种记忆：
 
-MIT
+| kind | 厅名 | 放什么 |
+|---|---|---|
+| `fact` | 事实厅 | 客观事实（他是谁、机器是什么配置） |
+| `preference` | 偏好阁 | 喜好、习惯、忌讳 |
+| `skill` | 技法坊 | 做事的正确姿势、踩过的坑 |
+| `decision` | 决策堂 | 拍板过的决定和理由 |
+| `episode` | 事件廊 | 一起经历过的事 |
+
+有 `node_modules` 和模型时，`save` 会自动把新记忆补成向量；没有就跳过，纯关键词检索照常可用。
+
+---
+
+## 四、为什么有两个补丁（重要）
+
+语义层要在本机跑一个向量模型。正常路径是 `onnxruntime-node`（原生 .dll），但它在
+**一部分机器上会直接崩**（进程级 `0xC0000005` / DLL 初始化失败），连版本都换不回来。
+
+所以这里换成 wasm：把 `onnxruntime-node` 换成一个**转发层**，所有推理走
+`onnxruntime-web`（浏览器同款的 wasm 实现）。副作用是慢一点（单条 ~70ms），但稳。
+
+| 补丁 | 干什么 |
+|---|---|
+| `patches/onnxruntime-node` | 把调用转发给 `onnxruntime-web`，强制 `executionProviders: ["wasm"]`、`numThreads=1`、wasm 文件用本地路径 |
+| `patches/sharp-stub` | transformers 会顺手 require `sharp`（图像处理），我们只用文本，换空桩避免它去加载原生 dll |
+
+**如果你那边原生 onnxruntime 是好的**，也可以不用这两个补丁：删掉 `node_modules/onnxruntime-node` 和 `node_modules/sharp` 的替换，直接 `npm install` 后试用。崩了就再盖回来。
+
+---
+
+## 五、常见问题
+
+**Q：npm install 报 EPERM / 软链错误**
+说明放到了 exFAT 盘（U 盘）。npm 一般没事；如果用 pnpm 会失败，改成：
+`pnpm install --config.node-linker=hoisted --config.symlink=false`
+
+**Q：模型下不动**
+先试 `-Mirror https://huggingface.co`；国内建议默认的 `hf-mirror.com`。
+实在不行，把 `Xenova/bge-small-zh-v1.5` 那 5 个文件手动塞进 `models/Xenova/bge-small-zh-v1.5/`。
+
+**Q：`pip` 装东西很慢/403**
+本包不需要 pip，全部是标准库。真要装，用阿里云源：
+`-i https://mirrors.aliyun.com/pypi/simple`
+
+**Q：语义检索没生效**
+看有没有 `node_modules` 和 `models`。缺一个就会自动降级成关键词检索（不报错）。
+
+**Q：想把数据库/模型放到别处**
+用环境变量覆盖：`PALACE_DB`（数据库位置）、`PALACE_MODEL_DIR`（模型目录）、`PALACE_NODE`（node 可执行文件）、`PALACE_HEARTBEAT_LEGACY`（旧心跳日志兜底路径，默认不启用）。
+
+**Q：palace.db 越来越大**
+正常，文本很省。几百条记忆也就几 MB。
+
+---
+
+## 六、和 DSH 的关系（设计原则）
+
+**这条最重要：记忆宫殿不是 DSH 的依赖。**
+
+- DSH 不加载它、不 import 它；它坏了、删了、没启动，DSH 照常跑。
+- 反过来它依赖 DSH 提供的运行时（Python / Node），放在 DSH 的工作区里。
+- 它只是**一堆文件**，AI 想用的时候用命令行读写；不想用就不存在。
+
+消息记录、日记、心跳这类"额外数据"同理：都是可选的旁支，断了不影响主线。
+
+---
+
+## 七、可选：陪伴心跳
+
+包里带了 `palace.py presence`，可以读一份"主人有没有在电脑前"的日志（JSONL，每 60 秒一条）。
+那个采集程序是另一个独立小软件，不属于本包；没有它的时候 `presence` 只会说"还没有日志"。
+
+字段要求（自己写采集器时照这个来）：
+
+```json
+{"ts": "2026-10-23T15:59:29+08:00", "idle": 2, "present": true}
+{"type": "daily_summary", "date": "2026-10-23", "present_hours": 0.42, "away_hours": 0.01, "unknown_hours": 0.95, "partial": true}
+{"type": "gap_explain", "ts": "…", "from": "…", "gap_seconds": 425, "reason": "program_not_running", "events": []}
+```
+
+三条解读规矩，写进去之前先记住：
+
+1. **空白 ≠ 不在**。不在是采样到人没在；空白是根本没采样。
+2. 数据只说明采样那一刻。
+3. 停更超过三倍间隔，就只说"不知道"，别拿旧数据冒充现在。
+
+---
+
+## 八、致谢与出处
+
+结构上参考了 dsh-engram 的设计（房间/门牌/索引），实现全部重写：无插件、纯本地、只用标准库。
+语义层是 transformers.js + bge-small-zh-v1.5（512 维，CLS pooling + L2 normalize）。

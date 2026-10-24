@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS nodes (
+CREATE TABLE IF NOT EXISTS nodes (
   id TEXT PRIMARY KEY, scope TEXT NOT NULL, kind TEXT NOT NULL, content TEXT NOT NULL,
   importance REAL NOT NULL, confidence REAL NOT NULL, status TEXT NOT NULL,
   created_at INTEGER NOT NULL, last_accessed_at INTEGER NOT NULL, access_count INTEGER NOT NULL,
@@ -7,6 +7,10 @@
   next_review_at INTEGER, ease_factor REAL, interval_days REAL, review_reps INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS nodes_fts (node_id TEXT UNIQUE, content TEXT);
+CREATE TABLE IF NOT EXISTS nodes_revisions (
+  node_id TEXT NOT NULL, content TEXT NOT NULL, kind TEXT NOT NULL,
+  importance REAL NOT NULL, superseded_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS entities (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
   aliases_json TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS facts (id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, content TEXT NOT NULL,
