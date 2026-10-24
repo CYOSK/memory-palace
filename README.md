@@ -61,7 +61,6 @@ python palace.py list   [--scope] [--kind] [--limit]
 python palace.py profile [--scope]      # 常驻画像
 python palace.py rooms                  # 各厅条数
 python palace.py stats                  # 总数
-python palace.py presence [--log 心跳日志]  # 读心跳日志（需要配套程序，见第六节）
 ```
 
 `kind` 五个厅，对应五种记忆：
@@ -113,7 +112,7 @@ python palace.py presence [--log 心跳日志]  # 读心跳日志（需要配套
 看有没有 `node_modules` 和 `models`。缺一个就会自动降级成关键词检索（不报错）。
 
 **Q：想把数据库/模型放到别处**
-用环境变量覆盖：`PALACE_DB`（数据库位置）、`PALACE_MODEL_DIR`（模型目录）、`PALACE_NODE`（node 可执行文件）、`PALACE_HEARTBEAT_LEGACY`（旧心跳日志兜底路径，默认不启用）。
+用环境变量覆盖：`PALACE_DB`（数据库位置）、`PALACE_MODEL_DIR`（模型目录）、`PALACE_NODE`（node 可执行文件）。
 
 **Q：palace.db 越来越大**
 正常，文本很省。几百条记忆也就几 MB。
@@ -128,32 +127,9 @@ python palace.py presence [--log 心跳日志]  # 读心跳日志（需要配套
 - 反过来它依赖 DSH 提供的运行时（Python / Node），放在 DSH 的工作区里。
 - 它只是**一堆文件**，AI 想用的时候用命令行读写；不想用就不存在。
 
-消息记录、日记、心跳这类"额外数据"同理：都是可选的旁支，断了不影响主线。
-
 ---
 
-## 七、可选：陪伴心跳
-
-包里带了 `palace.py presence`，可以读一份"主人有没有在电脑前"的日志（JSONL，每 60 秒一条）。
-那个采集程序是另一个独立小软件，不属于本包；没有它的时候 `presence` 只会说"还没有日志"。
-
-字段要求（自己写采集器时照这个来）：
-
-```json
-{"ts": "2026-10-23T15:59:29+08:00", "idle": 2, "present": true}
-{"type": "daily_summary", "date": "2026-10-23", "present_hours": 0.42, "away_hours": 0.01, "unknown_hours": 0.95, "partial": true}
-{"type": "gap_explain", "ts": "…", "from": "…", "gap_seconds": 425, "reason": "program_not_running", "events": []}
-```
-
-三条解读规矩，写进去之前先记住：
-
-1. **空白 ≠ 不在**。不在是采样到人没在；空白是根本没采样。
-2. 数据只说明采样那一刻。
-3. 停更超过三倍间隔，就只说"不知道"，别拿旧数据冒充现在。
-
----
-
-## 八、致谢与出处
+## 七、致谢与出处
 
 结构上参考了 dsh-engram 的设计（房间/门牌/索引），实现全部重写：无插件、纯本地、只用标准库。
 语义层是 transformers.js + bge-small-zh-v1.5（512 维，CLS pooling + L2 normalize）。

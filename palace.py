@@ -18,7 +18,7 @@
 检索：search 用内容子串 + importance 排序（中文稳妥）；语义检索见 palace_embed.mjs
       （save 后自动补向量，`node palace_embed.mjs search --query ...` 按相似度搜）。
 """
-import argparse, datetime, json, os, shutil, sqlite3, subprocess, sys, time, uuid
+import argparse, os, shutil, sqlite3, subprocess, sys, time, uuid
 
 DEFAULT_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "palace.db")
 
@@ -29,32 +29,6 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-# 旧路径兜底：本机早期把心跳日志放在别处时，用环境变量指过去即可（默认不启用）
-LEGACY_HEARTBEAT_LOG = os.environ.get("PALACE_HEARTBEAT_LEGACY", "")
-
-
-def heartbeat_log_default():
-    """心跳日志在哪？按顺序找：
-
-    1. 心跳程序公布的「日志路径.txt」——它知道 exe 放哪、配置怎么写的，以它为准
-    2. 用户目录下的默认位置——分享给别人用时的默认落点
-    3. 旧的本机路径——兼容早期装在这台机器上的那些数据
-    """
-    home = os.environ.get("USERPROFILE") or os.path.expanduser("~")
-    folder = os.path.join(home, "心跳感知")
-    try:
-        with open(os.path.join(folder, "日志路径.txt"), encoding="utf-8") as f:
-            p = f.read().strip()
-        if p:
-            return p
-    except Exception:
-        pass
-    p = os.path.join(folder, "heartbeat.jsonl")
-    if os.path.exists(p):
-        return p
-    if LEGACY_HEARTBEAT_LOG and os.path.exists(LEGACY_HEARTBEAT_LOG):
-        return LEGACY_HEARTBEAT_LOG
-    return p
 ROOMS = {"fact": "事实厅", "preference": "偏好阁", "skill": "技法坊",
          "decision": "决策堂", "episode": "事件廊"}
 KINDS = list(ROOMS.keys())
@@ -329,176 +303,6 @@ def cmd_stats(db):
     print(f"nodes={n} entities={e} facts={f} profile_blocks={p}")
 
 
-# ---- presence / 心跳日志 ----
-def _parse_ts(s):
-    try:
-        return datetime.datetime.fromisoformat(str(s))
-    except Exception:
-        return None
-
-
-def _fmt_dur(sec):
-    sec = max(0, int(sec))
-    if sec < 60:
-        return f"{sec} 秒"
-    m, s = divmod(sec, 60)
-    if m < 60:
-        return f"{m} 分 {s} 秒"
-    h, m = divmod(m, 60)
-    if h < 24:
-        return f"{h} 小时 {m} 分"
-    d, h = divmod(h, 24)
-    return f"{d} 天 {h} 小时"
-
-
-def _ago(now, ts):
-    if ts is None:
-        return "?"
-    try:
-        return _fmt_dur((now - ts).total_seconds())
-    except Exception:
-        return "?"
-
-
-def _read_tail(path, max_bytes=262144):
-    """只读文件尾部。
-
-    日志 append-only、只增不减，全量读迟早会卡。默认读最后 256 KB，
-    几千条，够用了。
-    """
-    try:
-        size = os.path.getsize(path)
-    except OSError:
-        return []
-    try:
-        with open(path, "rb") as f:
-            f.seek(max(0, size - max_bytes))
-            chunk = f.read().decode("utf-8", errors="replace")
-    except OSError:
-        return []
-    lines = [l for l in chunk.splitlines() if l.strip()]
-    if size > max_bytes and lines:
-        lines = lines[1:]          # 第一行多半是半截，丢掉
-    out = []
-    for l in lines:
-        try:
-            out.append(json.loads(l))
-        except Exception:
-            continue
-    return out
-
-
-def _guess_interval(beats):
-    """从最近几条心跳反推采样间隔。
-
-    读取端看不到那边的配置文件，只能从数据本身看，取中位数抗干扰。
-    """
-    ts = []
-    for b in beats[-30:]:
-        t = _parse_ts(b.get("ts"))
-        if t:
-            ts.append(t)
-    gaps = []
-    for i in range(len(ts) - 1):
-        g = (ts[i + 1] - ts[i]).total_seconds()
-        if 0 < g < 3600:
-            gaps.append(g)
-    if not gaps:
-        return 60.0
-    gaps.sort()
-    return gaps[len(gaps) // 2]
-
-
-GAP_REASON_CN = {
-    "sleep": "机器睡了",
-    "machine_off": "关机重启过",
-    "program_not_running": "机器开着但程序没跑",
-    "machine_on": "机器开着",
-    "unknown": "查不出来",
-}
-
-
-def cmd_presence(log, tail):
-    if not os.path.exists(log):
-        print(f"（还没有心跳日志：{log}）")
-        return
-    recs = _read_tail(log)
-    if not recs:
-        print("（心跳日志为空）")
-        return
-    summaries = [r for r in recs if r.get("type") == "daily_summary"]
-    explains = [r for r in recs if r.get("type") == "gap_explain"]
-    beats = [r for r in recs if r.get("type") not in
-             ("daily_summary", "gap_explain")]
-    if tail and tail > 0:
-        beats = beats[-tail:]
-    now = datetime.datetime.now().astimezone()
-
-    print(f"心跳日志：{log}")
-    if not beats:
-        print("（尚无心跳采样）")
-    else:
-        last = beats[-1]
-        last_ts = _parse_ts(last.get("ts"))
-        idle = last.get("idle")
-        present = last.get("present")
-        state = last.get("state")
-        if state is None:
-            state = "在" if present else ("不在" if present is not None else "未知")
-        else:
-            state = {"away": "不在", "back": "在"}.get(state, state)
-        line = f"当前状态：{state}"
-        if idle is not None:
-            line += f"（空闲 {idle}s）"
-        print(line)
-        print(f"最近采样：{last.get('ts')}（{_ago(now, last_ts)} 前）")
-
-        # 新鲜度：日志停更了就不能照着旧数据说「现在在」——
-        # 那不是不知道，是确信地说错，比空白更糟
-        if last_ts is not None:
-            age = (now - last_ts).total_seconds()
-            limit = max(_guess_interval(beats) * 3, 120)
-            if age > limit:
-                print(f"⚠ 心跳已中断 {_ago(now, last_ts)}"
-                      f"（超过 {_fmt_dur(limit)} 没有新记录）")
-                print(f"  最后可信状态：{state}。之后发生了什么，日志里没有。")
-
-        last_away = None
-        last_back = None
-        for r in beats:
-            st = r.get("state")
-            ts = _parse_ts(r.get("ts"))
-            if st == "away":
-                last_away = ts
-            elif st == "back":
-                last_back = ts
-        if last_back:
-            print(f"上次回来：{last_back.isoformat()}（{_ago(now, last_back)} 前）")
-        if last_away:
-            print(f"上次离开：{last_away.isoformat()}")
-            if last_back is None or last_away > last_back:
-                print(f"已经离开：{_ago(now, last_away)}")
-        else:
-            print("（这段时间还没有离开记录）")
-
-    if summaries:
-        s = summaries[-1]
-        d = s.get("date")
-        # 同一天会有多条，最后一条最完整；但也要防止把昨天的当成今天的
-        tag = "" if d == now.date().isoformat() else f"（这是 {d} 的，今天还没有）"
-        print(f"汇总：{d}{tag}")
-        print(f"  在 {s.get('present_hours')}h ｜ 不在 {s.get('away_hours')}h ｜ "
-              f"空白 {s.get('unknown_hours')}h ｜ "
-              f"最长离开 {s.get('longest_away_hours')}h")
-        if s.get("partial"):
-            print("  ⚠ 空白多于已知时长，这份汇总不代表整天")
-
-    if explains:
-        g = explains[-1]
-        why = GAP_REASON_CN.get(g.get("reason"), g.get("reason"))
-        print(f"上一段空白：{_fmt_dur(g.get('gap_seconds') or 0)}｜{why}")
-
-
 def main():
     ap = argparse.ArgumentParser(description="本地记忆宫殿")
     ap.add_argument("--db", default=DEFAULT_DB)
@@ -531,10 +335,6 @@ def main():
     sub.add_parser("rooms")
     sub.add_parser("stats")
 
-    ps = sub.add_parser("presence", help="读心跳日志，看主人在不在/离开多久")
-    ps.add_argument("--log", default=heartbeat_log_default())
-    ps.add_argument("--tail", type=int, default=0)
-
     a = ap.parse_args()
     if a.cmd == "init":
         cmd_init(a.src, a.db)
@@ -550,8 +350,6 @@ def main():
         cmd_rooms(a.db)
     elif a.cmd == "stats":
         cmd_stats(a.db)
-    elif a.cmd == "presence":
-        cmd_presence(a.log, a.tail)
 
 
 if __name__ == "__main__":
